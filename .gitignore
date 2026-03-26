@@ -1,0 +1,39 @@
+# Environment — never commit secrets
+.env
+
+# Dependencies
+node_modules/
+
+# Backup files
+*.bak
+*.bak-*
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime temp files
+*.tmp
+PROJECT-NOTES.md
+
+# Bridge state files
+channel-modes.json
+mailbox-list.json
+bridge.pid
+
+# Internal planning docs — local only, not published
+ROADMAP.md
+ROADMAP-DETAILED.md
+
+# Test plans — local only
+TEST-*.md
+TEAMS-FORMATTING.md
+
+# Claude Code — local dev context, not published
+CLAUDE.md
+.claude/
