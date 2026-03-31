@@ -507,14 +507,6 @@ Channel support is functional but has known limitations being actively worked on
 
 ---
 
-## Limitations
-
-- Polling-based — 5-second delay before DMs are received (not real-time)
-- Presence expiry is 60 minutes — refreshed on each message
-- Cannot run simultaneously with the native OpenClaw Teams plugin
-
----
-
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE) for details.
