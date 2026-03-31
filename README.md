@@ -200,13 +200,21 @@ This is your `BOT_USER_ID` — the bridge uses it to filter out its own messages
 
 The bridge authenticates to OpenClaw using a registered device identity. This file must exist on the machine running the bridge:
 
+**Windows:**
 ```
 %USERPROFILE%\.openclaw\identity\device.json
+```
+
+**macOS / Linux:**
+```
+~/.openclaw/identity/device.json
 ```
 
 This file is created during OpenClaw device registration and contains `deviceId`, `privateKeyPem`, and `publicKeyPem`. It is unique to each deployment and must never be committed to the repo.
 
 ### 3. Install & Run
+
+**Windows:**
 
 ```powershell
 git clone https://github.com/Patchnet/agent-bridge.git C:\Dev\agent-bridge
@@ -214,12 +222,31 @@ cd C:\Dev\agent-bridge
 npm install
 ```
 
+**macOS / Linux:**
+
+```bash
+git clone https://github.com/Patchnet/agent-bridge.git ~/agent-bridge
+cd ~/agent-bridge
+npm install
+chmod +x bridge.sh scripts/*.sh
+```
+
+> **macOS/Linux prerequisites:** Node.js 18+, Python 3 (for OAuth callback listener and JSON parsing in the CLI), and `curl`. All are pre-installed on macOS. On Linux, install via your package manager if needed.
+
 ### 4. Run the Setup Script
 
 The setup script handles credentials, the OAuth login flow, and writes your `.env` in one pass:
 
+**Windows:**
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup-bridge.ps1
+```
+
+**macOS / Linux:**
+
+```bash
+./scripts/setup-bridge.sh
 ```
 
 The script will:
@@ -249,19 +276,23 @@ If you prefer to configure manually, copy `.env.example` to `.env` and fill in a
 
 ### 5. Run
 
+**Windows (PowerShell):**
+
 ```powershell
-# Start, stop, restart, or view logs
-.\bridge.ps1 start
-.\bridge.ps1 stop
-.\bridge.ps1 restart
-.\bridge.ps1 log
+.\bridge.ps1
 ```
 
-`bridge.ps1` is the single entry point for managing the bridge process. It handles PID tracking, log rotation, and background execution.
+**macOS / Linux (Bash):**
+
+```bash
+./bridge.sh
+```
+
+Both CLIs provide an interactive prompt with commands: `start`, `stop`, `restart`, `status`, `config`, `teams`, `set`, `setup`, `logs`, `help`, `exit`.
 
 For development, you can also run directly:
 
-```powershell
+```bash
 node index.js
 ```
 
@@ -287,10 +318,14 @@ lib/
   mailboxes.js    — Shared mailbox management and polling
   logo.js         — ASCII art logo and startup banner
 scripts/
-  setup-bridge.ps1  — one-shot OAuth2 setup + .env generation
-  start.ps1         — stop existing + start bridge (writes bridge.pid)
-  stop.ps1          — kill bridge by PID file + orphan sweep
-bridge.ps1          — CLI entry point (start/stop/restart/log)
+  setup-bridge.ps1  — one-shot OAuth2 setup + .env generation (Windows)
+  setup-bridge.sh   — one-shot OAuth2 setup + .env generation (macOS/Linux)
+  start.ps1         — stop existing + start bridge (Windows)
+  start.sh          — stop existing + start bridge (macOS/Linux)
+  stop.ps1          — kill bridge by PID file + orphan sweep (Windows)
+  stop.sh           — kill bridge by PID file + orphan sweep (macOS/Linux)
+bridge.ps1          — CLI entry point (Windows)
+bridge.sh           — CLI entry point (macOS/Linux)
 skill/
   SKILL.md          — OpenClaw skill definition
   references/
@@ -320,6 +355,8 @@ The refresh token auto-rotates on every use and is saved back to `.env`. As long
 
 Use the bridge CLI to manage the process:
 
+**Windows:**
+
 ```powershell
 .\bridge.ps1 start      # Start in background (auto-stops existing)
 .\bridge.ps1 stop       # Stop gracefully
@@ -327,15 +364,37 @@ Use the bridge CLI to manage the process:
 .\bridge.ps1 log        # Tail the bridge log
 ```
 
+**macOS / Linux:**
+
+```bash
+./bridge.sh start
+./bridge.sh stop
+./bridge.sh restart
+./bridge.sh logs
+```
+
+Or launch the interactive CLI with `./bridge.sh` (no arguments).
+
 ### Updating
 
 After pulling new code from GitHub:
+
+**Windows:**
 
 ```powershell
 .\bridge.ps1 stop
 git pull
 npm install
 .\bridge.ps1 start
+```
+
+**macOS / Linux:**
+
+```bash
+./bridge.sh stop
+git pull
+npm install
+./bridge.sh start
 ```
 
 ---
