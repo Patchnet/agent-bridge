@@ -514,8 +514,9 @@ Apache License 2.0 — see [LICENSE](LICENSE) for details.
 ---
 
 Built with ❤️ by [Luis](https://x.com/luisrmartinez) and the team at [Patchnet](https://x.com/patchnet).
-Powered by [OpenClaw](https://github.com/openclaw/openclaw) — created by Peter Steinberger and the OpenClaw community.
 
-Not affiliated with or endorsed by Microsoft Corporation.
+Thank you to [OpenClaw](https://github.com/openclaw/openclaw) and its community.
+
+Not affiliated with or endorsed by Microsoft Corporation or OpenClaw.
 
 Hope this makes your day better.
