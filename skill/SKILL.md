@@ -234,6 +234,29 @@ Channel messages arrive with:
 
 Always reply in-thread. Default channel summaries to last 24-48 hours unless specified otherwise.
 
+## Cron Jobs
+
+When configuring OpenClaw cron jobs that need bridge tools (email, calendar, Teams, tasks, files, people):
+
+✅ **Required settings:**
+- `sessionTarget: "main"` — the main session has the bridge connection
+- `payload.kind: "systemEvent"` — routes the message through the bridge
+- `delivery.mode: "none"` — the main session handles its own output
+
+❌ **Do NOT use `sessionTarget: "isolated"`** for anything bridge-dependent. Isolated sessions can't reach M365 tools and will error with "Channel is required (no configured channels detected)."
+
+**Writing the payload text:**
+- Write it as a complete, self-contained instruction — the agent reads it cold with no prior context
+- Include all specifics: recipient emails, date ranges, format preferences, etc.
+- Do not assume the agent remembers anything from previous runs
+
+**Quick checklist:**
+- [ ] `sessionTarget: "main"`
+- [ ] `payload.kind: "systemEvent"`
+- [ ] `delivery.mode: "none"`
+- [ ] Full instructions in the `text` field — no assumed context
+- [ ] All specifics included (recipients, dates, formats)
+
 ## Rules
 
 - **Team membership required.** Only teams the agent account has been added to are accessible.
