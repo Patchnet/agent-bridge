@@ -22,7 +22,7 @@ const { buildSessionKey } = require('./lib/openclaw');
 const { EMAIL_MODE, getUnreadEmails, markAsRead, replyToEmail, extractEmailPlainText, markdownToEmailHtml } = require('./lib/email');
 const { getToolNames } = require('./lib/tools');
 const { runBridgeTurn } = require('./lib/runner');
-const { runBootstrap, startInternalWatcher } = require('./lib/internal');
+const { runBootstrap, startOrphanTurnHandler } = require('./lib/internal');
 
 // Import tool modules — registration happens on require()
 require('./lib/calendar');
@@ -1148,8 +1148,8 @@ async function main() {
   // Run bootstrap turn (once, best-effort, before poll loops)
   await runBootstrap();
 
-  // Start internal session watcher for proactive tasks (cron, workspace triggers)
-  startInternalWatcher();
+  // Start orphan turn handler for proactive tasks (cron, system events)
+  startOrphanTurnHandler();
 
   // First poll immediately, then on interval
   await poll();
