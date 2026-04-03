@@ -18,10 +18,11 @@ require('dotenv').config();
 const { getChats, getMessagesSince, sendMessage, editMessage, extractPlainText, extractAttachments, downloadAttachment, sendFile, sendReferenceLink, setPresence, getJoinedTeams, getChannels, getChannelMessages, getChannelMessagesWithReplies, sendChannelMessage, replyToChannelMessage, sendChannelFile } = require('./lib/teams');
 const { forceRefresh } = require('./lib/auth');
 const { graphRequest } = require('./lib/graph');
-const { sendToOpenclaw, onReply, buildSessionKey } = require('./lib/openclaw');
+const { buildSessionKey } = require('./lib/openclaw');
 const { EMAIL_MODE, getUnreadEmails, markAsRead, replyToEmail, extractEmailPlainText, markdownToEmailHtml } = require('./lib/email');
-const { parseFileBlocks } = require('./lib/files');
-const { parseToolBlocks, executeTool, formatToolResults, getToolNames } = require('./lib/tools');
+const { getToolNames } = require('./lib/tools');
+const { runBridgeTurn } = require('./lib/runner');
+const { runBootstrap, startInternalWatcher } = require('./lib/internal');
 
 // Import tool modules — registration happens on require()
 require('./lib/calendar');
@@ -182,23 +183,6 @@ const crypto = require('crypto');
 const ACK_THRESHOLD_MS = 6_000;
 const MAX_TOOL_ITERATIONS = 10;
 
-/**
- * Send a message to OpenClaw and wait for the reply.
- * Wraps the callback-based onReply/sendToOpenclaw into a promise.
- *
- * @param {string} message — text to send
- * @param {string} sessionKey — OpenClaw session key
- * @returns {Promise<string>} — agent reply text
- */
-function sendAndWaitForReply(message, sessionKey) {
-  return new Promise((resolve, reject) => {
-    onReply(sessionKey, (reply, err) => {
-      if (err) reject(err);
-      else resolve(reply);
-    });
-    sendToOpenclaw(message, sessionKey);
-  });
-}
 
 const ACK_MESSAGES = [
   '\u23F3 Working on it...',
@@ -359,86 +343,88 @@ async function dispatchMessage(chatId, msg) {
   // ── Presence ──────────────────────────────────────────────────────────
   await acquirePresence();
 
-  // ── Tool loop: send → reply → execute tools → send results → repeat ──
+  // ── Bridge turn via runner ─────────────────────────────────────────────
   const sessionKey = buildSessionKey('teams', chatId);
-  let currentMessage = messageWithContext;
-  let iteration = 0;
 
   try {
-    while (iteration < MAX_TOOL_ITERATIONS) {
-      iteration++;
-      let rawResponse;
+    const result = await runBridgeTurn(sessionKey, messageWithContext, {
+      maxIterations: MAX_TOOL_ITERATIONS,
+      async onIntermediateTurn({ text: turnText, files, toolCalls, iteration }) {
+        // Clear ack timer on first reply
+        if (iteration === 1) clearTimeout(ackTimer);
 
-      try {
-        rawResponse = await sendAndWaitForReply(currentMessage, sessionKey);
-      } catch (err) {
-        clearTimeout(ackTimer);
-        logErr('openclaw', 'Query failed', err);
-        rawResponse = buildErrorMessage(err);
-        // On error, deliver the error message and break out of the loop
-        await deliverReply(chatId, rawResponse, [], ackMessageId);
-        ackMessageId = null;
-        break;
-      }
+        log('openclaw', `Reply (turn ${iteration}): "${turnText.slice(0, 120)}${turnText.length > 120 ? '...' : ''}"` +
+          `${files.length ? ` (${files.length} file(s))` : ''}` +
+          `${toolCalls.length ? ` (${toolCalls.length} tool call(s))` : ''}`);
 
-      // Clear ack timer on first reply only
-      if (iteration === 1) clearTimeout(ackTimer);
-
-      // Parse file blocks and tool blocks from the reply
-      const { text: afterFiles, files } = parseFileBlocks(rawResponse);
-      const { text: cleanText, toolCalls } = parseToolBlocks(afterFiles);
-
-      log('openclaw', `Reply (turn ${iteration}): "${cleanText.slice(0, 120)}${cleanText.length > 120 ? '...' : ''}"` +
-        `${files.length ? ` (${files.length} file(s))` : ''}` +
-        `${toolCalls.length ? ` (${toolCalls.length} tool call(s))` : ''}`);
-
-      // Execute file blocks immediately (fire-and-forget per iteration)
-      for (const f of files) {
-        try {
-          if (f.path) {
-            const ok = await sendFile(chatId, f.path, f.name);
-            log('teams', ok ? `Sent file "${f.name}"` : `Failed to send file "${f.name}"`);
-          } else if (f.url) {
-            await sendReferenceLink(chatId, f.url, f.name);
-            log('teams', `Shared link "${f.name}"`);
+        // Send files immediately (fire-and-forget per iteration)
+        for (const f of files) {
+          try {
+            if (f.path) {
+              const ok = await sendFile(chatId, f.path, f.name);
+              log('teams', ok ? `Sent file "${f.name}"` : `Failed to send file "${f.name}"`);
+            } else if (f.url) {
+              await sendReferenceLink(chatId, f.url, f.name);
+              log('teams', `Shared link "${f.name}"`);
+            }
+          } catch (fileErr) {
+            logErr('teams', `Failed to send file "${f.name}"`, fileErr);
           }
-        } catch (fileErr) {
-          logErr('teams', `Failed to send file "${f.name}"`, fileErr);
         }
+
+        // Post intermediate text to user (edit-in-place)
+        if (turnText.trim()) {
+          try {
+            if (ackMessageId) {
+              await editMessage(chatId, ackMessageId, turnText);
+              log('teams', `Posted intermediate reply (turn ${iteration})`);
+            } else {
+              ackMessageId = await sendMessage(chatId, turnText);
+              log('teams', `Posted intermediate reply (turn ${iteration})`);
+            }
+          } catch (_) { /* intermediate delivery is best-effort */ }
+        }
+
+        log('tools', `Sent ${toolCalls.length} tool result(s) back to agent`);
+      },
+    });
+
+    // Clear ack timer (in case of single-turn with no tool calls)
+    clearTimeout(ackTimer);
+
+    // Log final turn
+    log('openclaw', `Reply (turn ${result.iterations}): "${result.text.slice(0, 120)}${result.text.length > 120 ? '...' : ''}"` +
+      `${result.files.length ? ` (${result.files.length} file(s))` : ''}`);
+
+    // Send final-turn files
+    for (const f of result.files) {
+      try {
+        if (f.path) {
+          const ok = await sendFile(chatId, f.path, f.name);
+          log('teams', ok ? `Sent file "${f.name}"` : `Failed to send file "${f.name}"`);
+        } else if (f.url) {
+          await sendReferenceLink(chatId, f.url, f.name);
+          log('teams', `Shared link "${f.name}"`);
+        }
+      } catch (fileErr) {
+        logErr('teams', `Failed to send file "${f.name}"`, fileErr);
       }
-
-      // No tool calls → final reply, deliver and break
-      if (toolCalls.length === 0) {
-        await deliverReply(chatId, cleanText, [], ackMessageId);
-        ackMessageId = null;
-        break;
-      }
-
-      // Post intermediate text to user if present (edit-in-place)
-      if (cleanText.trim()) {
-        try {
-          if (ackMessageId) {
-            await editMessage(chatId, ackMessageId, cleanText);
-            log('teams', `Posted intermediate reply (turn ${iteration})`);
-          } else {
-            ackMessageId = await sendMessage(chatId, cleanText);
-            log('teams', `Posted intermediate reply (turn ${iteration})`);
-          }
-        } catch (_) { /* intermediate delivery is best-effort */ }
-      }
-
-      // Execute tool calls in parallel
-      const results = await Promise.all(toolCalls.map(tc => executeTool(tc)));
-
-      // Send results back to agent in the same session
-      currentMessage = formatToolResults(results);
-      log('tools', `Sent ${results.length} tool result(s) back to agent`);
     }
 
-    if (iteration >= MAX_TOOL_ITERATIONS) {
+    // Deliver final reply or max-iterations warning
+    if (result.maxIterationsHit) {
       logErr('tools', `Tool loop hit max iterations (${MAX_TOOL_ITERATIONS})`, new Error('max iterations'));
       await sendMessage(chatId, 'I got stuck in a loop. Please try rephrasing your request.');
+    } else {
+      await deliverReply(chatId, result.text, [], ackMessageId);
+      ackMessageId = null;
     }
+  } catch (err) {
+    // OpenClaw error — deliver user-friendly message
+    clearTimeout(ackTimer);
+    logErr('openclaw', 'Query failed', err);
+    await deliverReply(chatId, buildErrorMessage(err), [], ackMessageId);
+    ackMessageId = null;
   } finally {
     // Clean up temp files
     for (const tmp of tempFiles) {
@@ -594,62 +580,48 @@ async function dispatchEmail(conversationId, emailMsg) {
   // ── Presence ────────────────────────────────────────────────────────
   await acquirePresence();
 
-  // ── Tool loop ──────────────────────────────────────────────────────
+  // ── Bridge turn via runner ──────────────────────────────────────────
   const sessionKey = buildSessionKey('email', conversationId);
-  let currentMessage = messageWithContext;
-  let iteration = 0;
 
   try {
-    while (iteration < MAX_TOOL_ITERATIONS) {
-      iteration++;
-      let rawResponse;
+    const result = await runBridgeTurn(sessionKey, messageWithContext, {
+      maxIterations: MAX_TOOL_ITERATIONS,
+      async onIntermediateTurn({ text: turnText, toolCalls, iteration }) {
+        log('email', `Reply to ${sender} (turn ${iteration}): "${turnText.slice(0, 120)}${turnText.length > 120 ? '…' : ''}"` +
+          `${toolCalls.length ? ` (${toolCalls.length} tool call(s))` : ''}`);
+        log('tools', `Email: sent ${toolCalls.length} tool result(s) back to agent`);
+      },
+    });
 
-      try {
-        rawResponse = await sendAndWaitForReply(currentMessage, sessionKey);
-      } catch (err) {
-        logErr('openclaw', 'Email query failed', err);
-        rawResponse = buildErrorMessage(err);
-        try {
-          if (sharedMailbox) {
-            await replyToSharedEmail(sharedMailbox, messageId, markdownToEmailHtml(rawResponse));
-          } else {
-            await replyToEmail(messageId, markdownToEmailHtml(rawResponse));
-          }
-        } catch (_) { /* best-effort */ }
-        break;
-      }
+    // Log final turn
+    log('email', `Reply to ${sender} (turn ${result.iterations}): "${result.text.slice(0, 120)}${result.text.length > 120 ? '…' : ''}"`);
 
-      const { text: afterFiles, files } = parseFileBlocks(rawResponse);
-      const { text: cleanText, toolCalls } = parseToolBlocks(afterFiles);
-
-      log('email', `Reply to ${sender} (turn ${iteration}): "${cleanText.slice(0, 120)}${cleanText.length > 120 ? '…' : ''}"` +
-        `${toolCalls.length ? ` (${toolCalls.length} tool call(s))` : ''}`);
-
-      // No tool calls → final reply, send email and break
-      if (toolCalls.length === 0) {
-        try {
-          if (sharedMailbox) {
-            await replyToSharedEmail(sharedMailbox, messageId, markdownToEmailHtml(cleanText));
-            log('email', `Replied via ${sharedMailbox} to ${sender}: ${subject}`);
-          } else {
-            await replyToEmail(messageId, markdownToEmailHtml(cleanText));
-            log('email', `Replied to email from ${sender}: ${subject}`);
-          }
-        } catch (sendErr) {
-          logErr('email', `Failed to reply to email from ${sender}`, sendErr);
-        }
-        break;
-      }
-
-      // Execute tool calls, send results back to agent
-      const results = await Promise.all(toolCalls.map(tc => executeTool(tc)));
-      currentMessage = formatToolResults(results);
-      log('tools', `Email: sent ${results.length} tool result(s) back to agent`);
-    }
-
-    if (iteration >= MAX_TOOL_ITERATIONS) {
+    // Deliver final reply or handle max iterations
+    if (result.maxIterationsHit) {
       logErr('tools', `Email tool loop hit max iterations`, new Error('max iterations'));
+    } else {
+      try {
+        if (sharedMailbox) {
+          await replyToSharedEmail(sharedMailbox, messageId, markdownToEmailHtml(result.text));
+          log('email', `Replied via ${sharedMailbox} to ${sender}: ${subject}`);
+        } else {
+          await replyToEmail(messageId, markdownToEmailHtml(result.text));
+          log('email', `Replied to email from ${sender}: ${subject}`);
+        }
+      } catch (sendErr) {
+        logErr('email', `Failed to reply to email from ${sender}`, sendErr);
+      }
     }
+  } catch (err) {
+    // OpenClaw error — deliver user-friendly message via email
+    logErr('openclaw', 'Email query failed', err);
+    try {
+      if (sharedMailbox) {
+        await replyToSharedEmail(sharedMailbox, messageId, markdownToEmailHtml(buildErrorMessage(err)));
+      } else {
+        await replyToEmail(messageId, markdownToEmailHtml(buildErrorMessage(err)));
+      }
+    } catch (_) { /* best-effort */ }
   } finally {
     await releasePresence();
   }
@@ -853,78 +825,73 @@ async function dispatchChannelMessage({ msg, teamId, teamName, channelId, channe
   await acquirePresence();
 
   const sessionKey = buildSessionKey('teams', `${channelId}_${threadId}`);
-  let currentMessage = messageWithContext;
-  let iteration = 0;
+
+  /** Helper: send files in channel context */
+  async function sendChannelFiles(files) {
+    for (const f of files) {
+      try {
+        if (f.path) {
+          const ok = await sendChannelFile(teamId, channelId, f.path, f.name);
+          log('channels', ok ? `Sent file "${f.name}"` : `Failed to send file "${f.name}"`);
+        } else if (f.url) {
+          const id = Buffer.from(f.url).toString('base64').slice(0, 64);
+          await graphRequest('POST', `/teams/${teamId}/channels/${channelId}/messages`, {
+            body: { contentType: 'html', content: `<attachment id="${id}"></attachment>` },
+            attachments: [{ id, contentType: 'reference', contentUrl: f.url, name: f.name }],
+          });
+          log('channels', `Shared link "${f.name}"`);
+        }
+      } catch (fileErr) {
+        logErr('channels', `Failed to send file "${f.name}"`, fileErr);
+      }
+    }
+  }
 
   try {
-    while (iteration < MAX_TOOL_ITERATIONS) {
-      iteration++;
-      let rawResponse;
+    const result = await runBridgeTurn(sessionKey, messageWithContext, {
+      maxIterations: MAX_TOOL_ITERATIONS,
+      async onIntermediateTurn({ text: turnText, files, toolCalls, iteration }) {
+        // Clear ack timer on first reply
+        if (iteration === 1) clearTimeout(ackTimer);
 
-      try {
-        rawResponse = await sendAndWaitForReply(currentMessage, sessionKey);
-      } catch (err) {
-        clearTimeout(ackTimer);
-        logErr('openclaw', 'Channel query failed', err);
-        try {
-          await replyToChannelMessage(teamId, channelId, threadId, buildErrorMessage(err), senderMention);
-        } catch (_) { /* best-effort */ }
-        break;
-      }
+        log('openclaw', `Channel reply (turn ${iteration}): "${turnText.slice(0, 80)}"` +
+          `${files.length ? ` (${files.length} file(s))` : ''}` +
+          `${toolCalls.length ? ` (${toolCalls.length} tool call(s))` : ''}`);
 
-      if (iteration === 1) clearTimeout(ackTimer);
+        // Send files immediately
+        await sendChannelFiles(files);
 
-      const { text: afterFiles, files } = parseFileBlocks(rawResponse);
-      const { text: cleanText, toolCalls } = parseToolBlocks(afterFiles);
+        log('tools', `Channel: sent ${toolCalls.length} tool result(s) back to agent`);
+      },
+    });
 
-      log('openclaw', `Channel reply (turn ${iteration}): "${cleanText.slice(0, 80)}"` +
-        `${files.length ? ` (${files.length} file(s))` : ''}` +
-        `${toolCalls.length ? ` (${toolCalls.length} tool call(s))` : ''}`);
+    // Clear ack timer (in case of single-turn with no tool calls)
+    clearTimeout(ackTimer);
 
-      // Execute file blocks immediately
-      for (const f of files) {
-        try {
-          if (f.path) {
-            const ok = await sendChannelFile(teamId, channelId, f.path, f.name);
-            log('channels', ok ? `Sent file "${f.name}"` : `Failed to send file "${f.name}"`);
-          } else if (f.url) {
-            const id = Buffer.from(f.url).toString('base64').slice(0, 64);
-            await graphRequest('POST', `/teams/${teamId}/channels/${channelId}/messages`, {
-              body: { contentType: 'html', content: `<attachment id="${id}"></attachment>` },
-              attachments: [{ id, contentType: 'reference', contentUrl: f.url, name: f.name }],
-            });
-            log('channels', `Shared link "${f.name}"`);
-          }
-        } catch (fileErr) {
-          logErr('channels', `Failed to send file "${f.name}"`, fileErr);
-        }
-      }
+    // Log final turn
+    log('openclaw', `Channel reply (turn ${result.iterations}): "${result.text.slice(0, 80)}"` +
+      `${result.files.length ? ` (${result.files.length} file(s))` : ''}`);
 
-      // No tool calls → final reply with @mention
-      if (toolCalls.length === 0) {
-        try {
-          if (cleanText.trim()) {
-            await replyToChannelMessage(teamId, channelId, threadId, cleanText, senderMention);
-            log('channels', `Replied in-thread in ${teamName} #${channelName} (@${sender})`);
-          }
-        } catch (sendErr) {
-          logErr('channels', `Failed to reply in ${teamName} #${channelName}`, sendErr);
-        }
-        break;
-      }
+    // Send final-turn files
+    await sendChannelFiles(result.files);
 
-      // Execute tool calls in parallel
-      const results = await Promise.all(toolCalls.map(tc => executeTool(tc)));
-      currentMessage = formatToolResults(results);
-      log('tools', `Channel: sent ${results.length} tool result(s) back to agent`);
-    }
-
-    if (iteration >= MAX_TOOL_ITERATIONS) {
+    // Deliver final reply or max-iterations warning
+    if (result.maxIterationsHit) {
       logErr('tools', `Channel tool loop hit max iterations`, new Error('max iterations'));
       try {
         await replyToChannelMessage(teamId, channelId, threadId, 'I got stuck in a loop. Please try rephrasing.');
       } catch (_) { /* best-effort */ }
+    } else {
+      try {
+        if (result.text.trim()) {
+          await replyToChannelMessage(teamId, channelId, threadId, result.text, senderMention);
+          log('channels', `Replied in-thread in ${teamName} #${channelName} (@${sender})`);
+        }
+      } catch (sendErr) {
+        logErr('channels', `Failed to reply in ${teamName} #${channelName}`, sendErr);
+      }
     }
+
     // Register thread as active — bot has replied, track for follow-up replies
     const threadKey = `${teamId}:${channelId}:${threadId}`;
     activeThreads.set(threadKey, {
@@ -932,6 +899,13 @@ async function dispatchChannelMessage({ msg, teamId, teamName, channelId, channe
       lastActivity: Date.now(),
     });
     log('channels', `Thread tracked: ${teamName} #${channelName} thread ${threadId.slice(0, 12)}...`);
+  } catch (err) {
+    // OpenClaw error — deliver user-friendly message in channel
+    clearTimeout(ackTimer);
+    logErr('openclaw', 'Channel query failed', err);
+    try {
+      await replyToChannelMessage(teamId, channelId, threadId, buildErrorMessage(err), senderMention);
+    } catch (_) { /* best-effort */ }
   } finally {
     for (const tmp of tempFiles) {
       try { fs.unlinkSync(tmp); } catch (_) { /* best-effort */ }
@@ -1170,6 +1144,12 @@ async function main() {
 
   // Set presence to Available on startup
   await setPresence('Available', 'Available', 60);
+
+  // Run bootstrap turn (once, best-effort, before poll loops)
+  await runBootstrap();
+
+  // Start internal session watcher for proactive tasks (cron, workspace triggers)
+  startInternalWatcher();
 
   // First poll immediately, then on interval
   await poll();

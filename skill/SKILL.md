@@ -1,6 +1,6 @@
 ---
 name: patchnet_agent_bridge
-description: "Microsoft Teams and Email bridge capabilities. Trigger when messages arrive with [Channel: Microsoft Teams] or [Channel: Email] context headers, or when the user asks about Teams channels, files, email, calendars, tasks, meetings, people, or presence."
+description: "Microsoft Teams and Email bridge capabilities. Trigger when messages arrive with [Channel: Microsoft Teams], [Channel: Email], or [Channel: Internal] context headers, or when the user asks about Teams channels, files, email, calendars, tasks, meetings, people, or presence."
 metadata:
   openclaw:
     emoji: "\U0001F4AC"
@@ -30,6 +30,20 @@ The agent is connected to Microsoft Teams and Email via an external bridge. The 
 <email body text>
 ```
 When a `Mailbox` field is present, the reply is sent from that shared mailbox address, not the agent's personal address.
+
+**Internal (bridge-initiated, non-user-facing):**
+
+```
+[Channel: Internal | Type: Bootstrap]
+<bridge startup context>
+```
+
+```
+[Channel: Internal | Type: Proactive Task]
+<task trigger or state context>
+```
+
+> Messages with `[Channel: Internal]` are bridge-initiated, non-user-facing turns. Execute requested work using bridge tools as needed. Do not post results to Teams, email, or any channel unless a bridge tool explicitly sends a message. Log outcomes to memory if appropriate.
 
 **File attachments** appear as additional context lines:
 ```
