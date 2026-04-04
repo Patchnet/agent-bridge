@@ -30,6 +30,9 @@ bridge.pid
 ROADMAP.md
 ROADMAP-DETAILED.md
 
+# Internal dev log — local only, public release notes live in GitHub Releases
+CHANGELOG.md
+
 # Test plans — local only
 TEST-*.md
 TEAMS-FORMATTING.md
