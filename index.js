@@ -1146,10 +1146,15 @@ async function main() {
   await setPresence('Available', 'Available', 60);
 
   // Run bootstrap turn (once, best-effort, before poll loops)
+  console.log(`[${new Date().toISOString()}] [bridge] >>> About to call runBootstrap()`);
   await runBootstrap();
+  console.log(`[${new Date().toISOString()}] [bridge] >>> Bootstrap returned`);
 
   // Start orphan turn handler for proactive tasks (cron, system events)
+  console.log(`[${new Date().toISOString()}] [bridge] >>> About to call startOrphanTurnHandler()`);
   startOrphanTurnHandler();
+  console.log(`[${new Date().toISOString()}] [bridge] >>> Orphan handler registered`);
+
 
   // First poll immediately, then on interval
   await poll();
