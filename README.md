@@ -51,12 +51,12 @@ The bridge acts as a governance layer between your OpenClaw agents and Microsoft
 - Email whitelist enforcement — every outbound recipient validated at code level, cannot be bypassed by agent
 - Shared mailbox support — agent-managed mailbox list, auto-removal on 403, manager notification
 
-### Bridge Tools (26+)
+### Bridge Tools
 - **Calendar** — get events, find free time, check schedules, create/update/cancel meetings, shared calendar support
 - **Tasks** — Microsoft To Do list/task CRUD
 - **People** — org directory search, user lookup, mailbox settings
 - **Email** — send, reply, forward with cc/bcc (whitelist-gated)
-- **Files** — OneDrive/SharePoint browse, search, shared-with-me, download URLs
+- **Files** — OneDrive/SharePoint browse, search, shared-with-me, download URLs. *Currently scoped to the agent's own OneDrive and items shared with it — group/channel-library file access is planned.*
 - **Channels** — read messages, post, reply in-thread with @mentions, react, importance marking
 - **Shared Mailboxes** — add/remove/list monitored shared mailboxes
 
@@ -74,7 +74,7 @@ The bridge acts as a governance layer between your OpenClaw agents and Microsoft
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js (current LTS recommended)
 - A dedicated Azure AD app registration for this deployment (see below)
 - OpenClaw gateway running locally with a registered device identity
 - A licensed Microsoft 365 user account for the agent (M365 Business Basic or higher) — this bridge acts as that user in your tenant and requires a valid user license to access Teams, presence, and files
@@ -91,7 +91,7 @@ A pre-built manifest is included in the repo at `app-registration-manifest.json`
 
 1. Go to [Azure Portal → Microsoft Entra ID → App registrations](https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps)
 2. Click **+ New registration**
-3. **Name:** `bot1-bridge` (one app registration per deployment — e.g., `bot2-bridge`, `bot3-bridge`)
+3. **Name:** `agent1-bridge` (one app registration per deployment — e.g., `agent2-bridge`, `agent3-bridge`)
 4. **Supported account types:** Select **Accounts in this organizational directory only** (Single tenant)
 5. **Redirect URI:** Select **Web** from the dropdown, enter `http://localhost:3000/callback`
 6. Click **Register**
@@ -171,7 +171,7 @@ If you prefer to add permissions manually:
 
 1. In the app registration, go to **Certificates & secrets** (left sidebar)
 2. Click **+ New client secret**
-3. **Description:** `bot1-bridge` (match to the app registration name — e.g., `bot2-bridge`, `bot3-bridge` for additional deployments)
+3. **Description:** `agent1-bridge` (match to the app registration name — e.g., `agent2-bridge`, `agent3-bridge` for additional deployments)
 4. **Expires:** Choose an expiration (24 months max recommended)
 5. Click **Add**
 6. Copy the **Value** column immediately — it is only shown once. This is your `CLIENT_SECRET`.
@@ -231,7 +231,7 @@ npm install
 chmod +x bridge.sh scripts/*.sh
 ```
 
-> **macOS/Linux prerequisites:** Node.js 18+, Python 3 (for OAuth callback listener and JSON parsing in the CLI), and `curl`. All are pre-installed on macOS. On Linux, install via your package manager if needed.
+> **macOS/Linux prerequisites:** Node.js (current LTS), Python 3 (for OAuth callback listener and JSON parsing in the CLI), and `curl`.
 
 ### 4. Run the Setup Script
 
@@ -420,7 +420,7 @@ The bridge supports optional email integration with three tiers controlled by `E
 4. Add the following to your `.env`:
    ```ini
    EMAIL_MODE=full
-   BOT_EMAIL=your-bot@yourdomain.com
+   BOT_EMAIL=your-agent@yourdomain.com
    EMAIL_WHITELIST=*@yourdomain.com
    EMAIL_POLL_INTERVAL_MS=15000
    ```
@@ -476,8 +476,8 @@ set <team name> open           — forward all @mentions
 
 ```
 teams
-set Patchnet 365 Advisory managed
-set SMS MFA open
+set Sales managed
+set Security open
 set Marketing monitor
 ```
 
@@ -500,7 +500,7 @@ Channel support is functional but has known limitations being actively worked on
 
 - **First message after mode change is missed** — when switching a team from `monitor` to `managed`/`open`, the bridge seeds its cursor on the first poll cycle. The first @mention sent during that window is consumed by seeding. Send a second @mention after ~10 seconds.
 - **Thread tracking is in-memory** — restarting the bridge loses all tracked threads. Follow-up replies in previously active threads will require a new @mention to re-establish the conversation.
-- **No edit-in-place for channel acks** — Graph API doesn't support editing channel messages with delegated auth. The 6-second acknowledgment message stays as a separate reply in the thread.
+- **Channel ack is a separate reply** — the 6-second acknowledgment is posted as its own in-thread reply rather than edited in place, so busy channels will see a short "working on it" message followed by the final answer.
 - **Polling delay** — channels are polled every 10 seconds, so there's up to a 10-second delay before an @mention is detected.
 - **CHANNEL_MANAGER requires Entra Object ID** — UPN/email matching does not work because Teams sends the sender's object ID, not UPN. A future update will resolve UPN to object ID at startup.
 - **Heavy first poll on startup** — seeding cursors for all channels in managed teams takes several seconds. Subsequent polls are fast.

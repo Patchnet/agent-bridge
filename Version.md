@@ -1,9 +1,12 @@
 ---
 enabled: true
-current: 1.1.0
+current: 1.1.1
 ---
 
 # Version History
+
+## 1.1.1 — 2026-04-04
+Fix email whitelist Reply-To bypass: `replyToEmail` and `replyToSharedEmail` now validate the effective reply destination (Reply-To if present, else From) against `EMAIL_WHITELIST`. Previously only `From` was checked in `replyToEmail`, and `replyToSharedEmail` had no whitelist check at all. Also: README/QUICKSTART cleanup, dependency unpinning, removed stale reference doc.
 
 ## 1.1.0 — 2026-04-04
 SSH-friendly CLI: non-interactive dispatch mode, `doctor` health checks, `config get/set <KEY>` with secret allowlist, `logs --tail N [--follow]`, reliable exit codes on status/doctor/config, version in CLI banner. Interactive REPL unchanged.

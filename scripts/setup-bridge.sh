@@ -8,7 +8,7 @@
 # Run from the project root: ./scripts/setup-bridge.sh
 #
 # The bot account login MUST be completed as the dedicated bot user
-# (e.g., pnet1aigent@patchnet.net) -- NOT your personal account.
+# account (e.g., teams-bridge@yourdomain.com) -- NOT your personal account.
 
 set -euo pipefail
 

@@ -35,7 +35,6 @@ CHANGELOG.md
 
 # Test plans — local only
 TEST-*.md
-TEAMS-FORMATTING.md
 
 # Claude Code — local dev context, not published
 CLAUDE.md

@@ -15,7 +15,7 @@
         powershell -ExecutionPolicy Bypass -File scripts\setup-teams-bridge.ps1
 
     The bot account login MUST be completed as the dedicated bot user
-    (e.g., pnet1aigent@patchnet.net) -- NOT your personal account.
+    account (e.g., teams-bridge@yourdomain.com) -- NOT your personal account.
 #>
 
 Set-StrictMode -Version Latest
