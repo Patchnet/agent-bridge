@@ -23,7 +23,3 @@ First production release. 26 bridge tools across calendar, tasks, people, files,
 - **1.6.0** — Patchnet Agent Support skill integration (minor, deployment)
 - **2.0.0** — MCP migration (major, replaces bridge-tool code fence convention with proper MCP tool registration)
 
----
-
-_See `C:\Dev\Version-Master.md` for the org-wide versioning rules and commit flow._
-_See `CHANGELOG.md` in this repo for detailed per-release change history._

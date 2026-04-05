@@ -7,7 +7,7 @@ Deploy the Patchnet Agent Bridge on a new machine from GitHub.
 ## Prerequisites
 
 - **Node.js** (current LTS)
-- **OpenClaw installed and registered** — device identity must exist at `%USERPROFILE%\.openclaw\identity\device.json`
+- **OpenClaw installed and registered** — run `openclaw onboard` to create the device identity the bridge reads from. See [OpenClaw docs](https://docs.openclaw.ai/).
 - **Azure app registration created** — see [README.md](README.md) for full setup (Option A: manifest import, Option B: manual)
 
 ---
@@ -59,7 +59,7 @@ The script walks through 9 steps:
 
 After setup, register the bridge's skill directory so the OpenClaw agent knows about the bridge tools:
 
-1. Open `openclaw.json` (typically at `%USERPROFILE%\.openclaw\openclaw.json` on Windows or `~/.openclaw/openclaw.json` on macOS/Linux)
+1. Open your OpenClaw config file `openclaw.json` (see the [OpenClaw documentation](https://docs.openclaw.ai/) for its location on your platform)
 2. Add the skill directory to `skills.load.extraDirs`:
 
 ```json

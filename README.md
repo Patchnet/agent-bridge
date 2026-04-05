@@ -198,35 +198,25 @@ This is your `BOT_USER_ID` — the bridge uses it to filter out its own messages
 
 ### 2. OpenClaw Device Identity
 
-The bridge authenticates to OpenClaw using a registered device identity. This file must exist on the machine running the bridge:
+The bridge authenticates to OpenClaw using a registered device identity file created during OpenClaw onboarding. If you installed OpenClaw via the standard installer and ran `openclaw onboard`, the file is already in place — the bridge reads it from the default OpenClaw location and no extra configuration is needed.
 
-**Windows:**
-```
-%USERPROFILE%\.openclaw\identity\device.json
-```
-
-**macOS / Linux:**
-```
-~/.openclaw/identity/device.json
-```
-
-This file is created during OpenClaw device registration and contains `deviceId`, `privateKeyPem`, and `publicKeyPem`. It is unique to each deployment and must never be committed to the repo.
+The file contains `deviceId`, `privateKeyPem`, and `publicKeyPem`. It is unique to each deployment and must never be committed to the repo. See the [OpenClaw documentation](https://docs.openclaw.ai/) if you've customized the install location or need to re-register a device.
 
 ### 3. Install & Run
 
 **Windows:**
 
 ```powershell
-git clone https://github.com/Patchnet/agent-bridge.git C:\Dev\agent-bridge
-cd C:\Dev\agent-bridge
+git clone https://github.com/Patchnet/agent-bridge.git
+cd agent-bridge
 npm install
 ```
 
 **macOS / Linux:**
 
 ```bash
-git clone https://github.com/Patchnet/agent-bridge.git ~/agent-bridge
-cd ~/agent-bridge
+git clone https://github.com/Patchnet/agent-bridge.git
+cd agent-bridge
 npm install
 chmod +x bridge.sh scripts/*.sh
 ```
