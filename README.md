@@ -2,6 +2,14 @@
 
 A custom Node.js bridge that connects Microsoft Teams and Email to the OpenClaw AI gateway — giving your agents the ability to communicate, schedule, manage tasks, and work with files across Microsoft 365.
 
+This project was driven by frustration with how AI lands in business today. For both the teams deploying it and the people using it, most of the experience feels foreign. It sits parallel to the way work actually happens, not inside it.
+
+OpenClaw opened a new possibility: AI working inside a computer, the way we work. Our goal is to show these tools can come into a business without forcing it to reinvent everything it already has.
+
+This is by no means a production-ready project. Exercise caution. That said, having an agent embedded in Microsoft 365 that operates like a coworker really brings home the potential of AI.
+
+\- Luis
+
 ---
 
 > ## ⚠ EXPERIMENTAL — READ BEFORE DEPLOYING
