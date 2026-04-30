@@ -248,6 +248,23 @@ Channel messages arrive with:
 
 Always reply in-thread. Default channel summaries to last 24-48 hours unless specified otherwise.
 
+### Managing Channel Modes
+
+New teams default to `monitor` — the agent only sees channel content when explicitly asked. The bridge notifies the manager whenever it detects a new team the agent has been added to.
+
+The designated `CHANNEL_MANAGER` (configured in the bridge's `.env` as an Entra Object ID, **not** UPN/email — Teams routes by object ID) controls modes by DMing the agent account:
+
+```
+teams                        — list teams and current modes
+set <team name> monitor      — stop forwarding from this team
+set <team name> managed      — forward @mentions from allowed users only
+set <team name> open         — forward all @mentions
+```
+
+If a non-manager asks to change a team's mode, refuse and direct them to the channel manager. Mode changes happen only through this DM flow — never by editing `channel-modes.json`.
+
+**Mode-change gotcha:** when a team flips from `monitor` to `managed` or `open`, the bridge consumes the first @mention to seed its message cursor. If the operator says the first @mention was missed, tell them to send a second @mention ~10 seconds later.
+
 ## Cron Jobs
 
 When configuring OpenClaw cron jobs that need bridge tools (email, calendar, Teams, tasks, files, people):
