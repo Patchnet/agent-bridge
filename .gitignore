@@ -36,6 +36,10 @@ CHANGELOG.md
 # Test plans — local only
 TEST-*.md
 
-# Claude Code — local dev context, not published
+# Claude Code agent files — local, NEVER tracked (per workspace Master Dev charter)
 CLAUDE.md
+*.local.md
 .claude/
+
+# Codex CLI agent files — local, NEVER tracked
+AGENTS.md
